@@ -390,64 +390,76 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (pct > 0.9) barColor = AppTheme.danger;
             else if (pct > 0.7) barColor = AppTheme.accentGold;
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardTheme.color,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? AppTheme.darkCardBorder
-                      : Colors.grey.shade200,
+            return GestureDetector(
+              onTap: () => _showSubCategoryDetails(context, provider, cat, totalBudget, spent),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardTheme.color,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? AppTheme.darkCardBorder
+                        : Colors.grey.shade200,
+                  ),
                 ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 10, height: 10,
-                            decoration: BoxDecoration(color: barColor, shape: BoxShape.circle),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(cat, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                        ],
-                      ),
-                      Text(
-                        remaining < 0
-                            ? '-${currencyFormatter.format(remaining.abs())}'
-                            : currencyFormatter.format(remaining),
-                        style: TextStyle(
-                          color: remaining < 0 ? AppTheme.danger : AppTheme.primaryGreen,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 10, height: 10,
+                              decoration: BoxDecoration(color: barColor, shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(cat, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(
-                      value: pct,
-                      minHeight: 6,
-                      backgroundColor: Theme.of(context).brightness == Brightness.dark
-                          ? AppTheme.darkCardBorder
-                          : Colors.grey.shade200,
-                      valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                        Text(
+                          remaining < 0
+                              ? '-${currencyFormatter.format(remaining.abs())}'
+                              : currencyFormatter.format(remaining),
+                          style: TextStyle(
+                            color: remaining < 0 ? AppTheme.danger : AppTheme.primaryGreen,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${currencyFormatter.format(spent)} dari ${currencyFormatter.format(totalBudget)}',
-                    style: const TextStyle(color: Color(0xFF8899BB), fontSize: 11),
-                  ),
-                ],
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: pct,
+                        minHeight: 6,
+                        backgroundColor: Theme.of(context).brightness == Brightness.dark
+                            ? AppTheme.darkCardBorder
+                            : Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${currencyFormatter.format(spent)} dari ${currencyFormatter.format(totalBudget)}',
+                          style: const TextStyle(color: Color(0xFF8899BB), fontSize: 11),
+                        ),
+                        const Text(
+                          'Ketuk untuk detail sub-kategori',
+                          style: TextStyle(color: Color(0xFF8899BB), fontSize: 9, fontStyle: FontStyle.italic),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             );
           }).toList(),
@@ -549,5 +561,133 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 'persembahan': return Icons.volunteer_activism_rounded;
       default: return Icons.receipt_long_rounded;
     }
+  }
+
+  void _showSubCategoryDetails(BuildContext context, FinanceProvider provider, String category, double totalBudget, double totalSpent) {
+    final subSpendings = provider.getSubCategorySpending(category);
+    final subBudgets = provider.budgets.where((b) => b.category == category).toList();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF161B2A) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          padding: const EdgeInsets.only(top: 12),
+          child: DraggableScrollableSheet(
+            initialChildSize: 0.6,
+            minChildSize: 0.4,
+            maxChildSize: 0.9,
+            expand: false,
+            builder: (context, scrollController) {
+              return Column(
+                children: [
+                  Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40, height: 40,
+                          decoration: BoxDecoration(
+                            color: _catColor(category).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(_catIcon(category), color: _catColor(category), size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(category, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                              Text(
+                                '${currencyFormatter.format(totalSpent)} / ${currencyFormatter.format(totalBudget)}',
+                                style: const TextStyle(color: Color(0xFF8899BB), fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Divider(height: 1, thickness: 1),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(20),
+                      itemCount: subBudgets.length,
+                      itemBuilder: (context, index) {
+                        final b = subBudgets[index];
+                        final spent = subSpendings[b.subCategory] ?? 0.0;
+                        final remaining = b.budgetAmount - spent;
+                        final pct = b.budgetAmount > 0 ? (spent / b.budgetAmount).clamp(0.0, 1.0) : 0.0;
+                        
+                        Color barColor = AppTheme.primaryGreen;
+                        if (pct > 0.9) barColor = AppTheme.danger;
+                        else if (pct > 0.7) barColor = AppTheme.accentGold;
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(b.subCategory, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                                  Text(
+                                    remaining < 0 
+                                      ? '-${currencyFormatter.format(remaining.abs())}'
+                                      : currencyFormatter.format(remaining),
+                                    style: TextStyle(
+                                      color: remaining < 0 ? AppTheme.danger : AppTheme.primaryGreen,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: pct,
+                                  minHeight: 6,
+                                  backgroundColor: isDark ? AppTheme.darkCardBorder : Colors.grey.shade200,
+                                  valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                '${currencyFormatter.format(spent)} dari ${currencyFormatter.format(b.budgetAmount)}',
+                                style: const TextStyle(color: Color(0xFF8899BB), fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
   }
 }
