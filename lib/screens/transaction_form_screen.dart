@@ -151,9 +151,32 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
         ));
       }
 
-      final success = await provider.addTransactions(newTransactions);
+      final result = await provider.addTransactions(newTransactions);
 
-      if (success && mounted) {
+      if (!mounted) return;
+
+      if (result.savedOffline) {
+        // Saved to offline queue
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.accentGold,
+            duration: const Duration(seconds: 4),
+            content: Row(
+              children: [
+                const Icon(Icons.cloud_off_rounded, color: Colors.black87),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${newTransactions.length} transaksi disimpan offline. Akan sync otomatis saat ada internet.',
+                    style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      } else if (result.success) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -168,7 +191,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
             ),
           ),
         );
-      } else if (mounted) {
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppTheme.danger,
@@ -181,7 +204,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                   child: Text(
                     provider.errorMessage.isNotEmpty
                         ? provider.errorMessage
-                        : 'Gagal menyimpan. Pastikan Apps Script sudah di-Deploy ulang.',
+                        : 'Gagal menyimpan.',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                   ),
                 ),

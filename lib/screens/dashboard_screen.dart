@@ -86,6 +86,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onRefresh: () => provider.fetchData(),
             child: CustomScrollView(
               slivers: [
+                // Offline banner
+                if (!provider.isOnline || provider.pendingSyncCount > 0)
+                  SliverToBoxAdapter(
+                    child: _buildOfflineBanner(provider),
+                  ),
                 SliverToBoxAdapter(
                   child: _buildHeader(context, provider),
                 ),
@@ -104,6 +109,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionFormScreen())),
         child: const Icon(Icons.add_rounded, size: 28),
+      ),
+    );
+  }
+
+  Widget _buildOfflineBanner(FinanceProvider provider) {
+    final isOnline = provider.isOnline;
+    final pending = provider.pendingSyncCount;
+    final isSyncing = provider.isSyncing;
+
+    Color bgColor;
+    IconData icon;
+    String message;
+
+    if (!isOnline) {
+      bgColor = const Color(0xFFFF6B35);
+      icon = Icons.cloud_off_rounded;
+      message = pending > 0
+          ? 'Mode Offline • $pending transaksi menunggu sync'
+          : 'Mode Offline • Data baru tersimpan di HP';
+    } else if (isSyncing) {
+      bgColor = const Color(0xFF5B8DEF);
+      icon = Icons.sync_rounded;
+      message = 'Menyinkronkan $pending transaksi ke Google Sheets...';
+    } else {
+      bgColor = AppTheme.accentGold;
+      icon = Icons.cloud_upload_rounded;
+      message = '$pending transaksi belum tersinkron. Tap untuk sync.';
+    }
+
+    return GestureDetector(
+      onTap: (!isOnline || isSyncing) ? null : () => provider.syncQueue(),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            isSyncing
+                ? const SizedBox(
+                    width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : Icon(icon, color: Colors.white, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                    color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            ),
+            if (isOnline && !isSyncing && pending > 0)
+              const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 18),
+          ],
+        ),
       ),
     );
   }

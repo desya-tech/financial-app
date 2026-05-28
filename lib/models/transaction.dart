@@ -28,4 +28,14 @@ class TransactionItem {
       description: json['description'] ?? '',
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'timestamp': timestamp.toIso8601String(),
+    'date': date.toIso8601String(),
+    'category': category,
+    'subCategory': subCategory,
+    'amount': amount,
+    'description': description,
+  };
 }

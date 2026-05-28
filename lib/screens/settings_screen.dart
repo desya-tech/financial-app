@@ -301,6 +301,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           if (!kIsWeb) const SizedBox(height: 16),
 
+          // Test notification button (only on non-web)
+          if (!kIsWeb)
+            OutlinedButton.icon(
+              onPressed: () async {
+                final svc = NotificationService();
+                await svc.sendTestNotification();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      backgroundColor: AppTheme.accentGold,
+                      duration: Duration(seconds: 3),
+                      content: Row(
+                        children: [
+                          Icon(Icons.notifications_active_rounded, color: Colors.black87),
+                          SizedBox(width: 8),
+                          Text(
+                            'Notifikasi test dikirim! Cek di panel atas HP.',
+                            style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+              },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.accentGold,
+                side: const BorderSide(color: AppTheme.accentGold),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              icon: const Icon(Icons.notification_add_rounded),
+              label: const Text(
+                'Test Notifikasi Sekarang',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+
+          const SizedBox(height: 16),
+
           ElevatedButton(
             onPressed: _isSaving ? null : _save,
             style: ElevatedButton.styleFrom(
