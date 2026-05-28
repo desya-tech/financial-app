@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/finance_provider.dart';
+import '../services/gemini_ocr_service.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 
@@ -20,6 +22,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isSaving = false;
   bool _obscureKey = true;
   bool _notifEnabled = false;
+  GeminiUsageStats? _geminiStats;
 
   @override
   void initState() {
@@ -28,8 +31,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _webAppUrlController.text = provider.webAppUrl;
     _geminiApiKeyController.text = provider.geminiApiKey;
     _spreadsheetUrlController.text = provider.spreadsheetUrl;
-    // Notifications only available on non-web
     _notifEnabled = !kIsWeb;
+    _loadGeminiStats();
   }
 
   @override
@@ -38,6 +41,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _geminiApiKeyController.dispose();
     _spreadsheetUrlController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadGeminiStats() async {
+    final stats = await GeminiOcrService().getUsageStats();
+    if (mounted) setState(() => _geminiStats = stats);
   }
 
   void _save() async {
@@ -201,6 +209,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: const TextStyle(fontSize: 13),
             ),
           ),
+
+          // Gemini AI Usage Stats card
+          if (_geminiStats != null)
+            _buildGeminiUsageCard(isDark, _geminiStats!),
 
           const SizedBox(height: 16),
 
@@ -453,6 +465,140 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 16),
           child,
         ],
+      ),
+    );
+  }
+
+  Widget _buildGeminiUsageCard(bool isDark, GeminiUsageStats stats) {
+    final pct = stats.usagePercent.clamp(0.0, 1.0);
+    final resetTime = DateFormat('HH:mm, dd MMM', 'id_ID').format(stats.resetAt);
+
+    Color barColor;
+    String statusLabel;
+    if (stats.quotaExhausted) {
+      barColor = AppTheme.danger;
+      statusLabel = 'Kuota habis!';
+    } else if (pct > 0.8) {
+      barColor = Colors.orange;
+      statusLabel = 'Hampir habis';
+    } else {
+      barColor = AppTheme.primaryGreen;
+      statusLabel = 'Normal';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: stats.quotaExhausted
+              ? AppTheme.danger.withOpacity(0.4)
+              : isDark ? AppTheme.darkCardBorder : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36, height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFB86EF5).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFFB86EF5), size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Gemini AI - Sisa Kredit Harian',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                    Text('Free tier: ${stats.dailyLimit} request/hari',
+                        style: const TextStyle(color: Color(0xFF8899BB), fontSize: 11)),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: barColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(statusLabel,
+                    style: TextStyle(color: barColor, fontSize: 11, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 8,
+              backgroundColor: isDark ? const Color(0xFF2A3047) : Colors.grey.shade200,
+              valueColor: AlwaysStoppedAnimation<Color>(barColor),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _statChip(Icons.check_circle_outline_rounded, 'Digunakan', '${stats.usedToday}', Colors.blue),
+              const SizedBox(width: 8),
+              _statChip(Icons.battery_full_rounded, 'Tersisa', '~${stats.remaining}', barColor),
+              const SizedBox(width: 8),
+              _statChip(Icons.refresh_rounded, 'Reset', resetTime, const Color(0xFF8899BB)),
+            ],
+          ),
+          if (stats.quotaExhausted) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.danger.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: AppTheme.danger, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Kuota AI hari ini habis. Scan nota tidak bisa digunakan hingga $resetTime.',
+                      style: const TextStyle(color: AppTheme.danger, fontSize: 11, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _statChip(IconData icon, String label, String value, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 14),
+            const SizedBox(height: 2),
+            Text(value,
+                style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(label, style: const TextStyle(color: Color(0xFF8899BB), fontSize: 9), maxLines: 1),
+          ],
+        ),
       ),
     );
   }
