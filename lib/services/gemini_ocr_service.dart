@@ -24,7 +24,14 @@ class GeminiUsageStats {
 class GeminiOcrService {
   String? apiKey;
 
-  static const int _freeDailyLimit = 1500; // Gemini Flash free tier
+  static const int _freeDailyLimit = 1500; // Gemini Flash free tier (1.5/2.0)
+  // Priority list: try newest/best first, fallback to older
+  static const List<String> _preferredModels = [
+    'gemini-2.0-flash',      // Best free model (as of 2025)
+    'gemini-2.0-flash-lite', // Lighter version
+    'gemini-1.5-flash',      // Stable fallback
+    'gemini-1.5-flash-8b',   // Ultra-light fallback
+  ];
   static const String _kUsageKey = 'gemini_usage_count';
   static const String _kUsageDateKey = 'gemini_usage_date';
   static const String _kQuotaExhaustedKey = 'gemini_quota_exhausted';
@@ -92,10 +99,25 @@ class GeminiOcrService {
     }
 
     try {
-      GenerativeModel model = GenerativeModel(
-        model: 'gemini-3.5-flash',
-        apiKey: apiKey!,
-      );
+      // Try preferred models in order (newest/best first)
+      GenerativeModel? model;
+      String? usedModel;
+
+      for (final modelName in _preferredModels) {
+        try {
+          final testModel = GenerativeModel(model: modelName, apiKey: apiKey!);
+          // Verify the model works with a tiny probe
+          model = testModel;
+          usedModel = modelName;
+          break;
+        } catch (_) {
+          continue;
+        }
+      }
+
+      if (model == null) {
+        throw Exception('Tidak ada model Gemini yang tersedia. Cek API key Anda.');
+      }
 
       final imageBytes = await imageFile.readAsBytes();
       final imagePart = DataPart('image/jpeg', imageBytes);
@@ -135,44 +157,29 @@ Respond STRICTLY in JSON format without any markdown blocks or backticks. Exampl
       try {
         response = await model.generateContent(content);
       } catch (e) {
-        if (e.toString().contains('is not found') || e.toString().contains('not supported')) {
-          try {
-            final modelsResponse = await http.get(Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey'));
-            if (modelsResponse.statusCode == 200) {
-               final modelsData = json.decode(modelsResponse.body);
-               final modelsList = modelsData['models'] as List;
-               String? fallbackModel;
-               
-               for (var m in modelsList) {
-                 final name = m['name'] as String;
-                 if (name.contains('flash') && !name.contains('lite') && !name.contains('tts') && !name.contains('audio') && !name.contains('preview')) {
-                    fallbackModel = name.replaceFirst('models/', '');
-                    break;
-                 }
-               }
-               
-               if (fallbackModel == null && modelsList.isNotEmpty) {
-                 // Absolute fallback: pick any model that has "flash" or "pro"
-                 for (var m in modelsList) {
-                   final name = m['name'] as String;
-                   if (name.contains('flash') || name.contains('pro')) {
-                     fallbackModel = name.replaceFirst('models/', '');
-                     break;
-                   }
-                 }
-               }
-               
-               if (fallbackModel != null) {
-                 model = GenerativeModel(model: fallbackModel, apiKey: apiKey!);
-                 response = await model.generateContent(content);
-               } else {
-                 throw Exception('No multimodal model found in your account. Available: ${modelsList.map((e) => e['name']).join(', ')}');
-               }
-            } else {
-               throw Exception('Failed to fetch models list: ${modelsResponse.body}');
+        // If selected model fails, try API discovery as last resort
+        if (e.toString().contains('not found') || e.toString().contains('not supported') || e.toString().contains('INVALID_ARGUMENT')) {
+          final modelsResponse = await http.get(
+            Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey'),
+          );
+          if (modelsResponse.statusCode == 200) {
+            final modelsList = (json.decode(modelsResponse.body)['models'] as List);
+            String? fallbackName;
+            for (var m in modelsList) {
+              final name = m['name'] as String;
+              if (name.contains('flash') && !name.contains('tts') && !name.contains('audio')) {
+                fallbackName = name.replaceFirst('models/', '');
+                break;
+              }
             }
-          } catch (inner) {
-            throw Exception('Original error: $e. Auto-discovery failed: $inner');
+            if (fallbackName != null) {
+              final fallback = GenerativeModel(model: fallbackName, apiKey: apiKey!);
+              response = await fallback.generateContent(content);
+            } else {
+              throw Exception('Tidak ada model Gemini yang cocok. Error asal: $e');
+            }
+          } else {
+            rethrow;
           }
         } else {
           rethrow;
