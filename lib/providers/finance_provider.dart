@@ -13,6 +13,7 @@ class FinanceProvider with ChangeNotifier {
   List<CategoryBudget> _budgets = [];
   bool _isLoading = false;
   String _errorMessage = '';
+  bool _isInitialized = false;
 
   String _webAppUrl = '';
   String _geminiApiKey = '';
@@ -22,6 +23,9 @@ class FinanceProvider with ChangeNotifier {
   List<CategoryBudget> get budgets => _budgets;
   bool get isLoading => _isLoading;
   String get errorMessage => _errorMessage;
+  bool get isInitialized => _isInitialized;
+  /// True only when Apps Script URL has been configured
+  bool get isSetupComplete => _webAppUrl.isNotEmpty;
 
   String get webAppUrl => _webAppUrl;
   String get geminiApiKey => _geminiApiKey;
@@ -44,9 +48,9 @@ class FinanceProvider with ChangeNotifier {
     
     if (_webAppUrl.isNotEmpty) {
       await fetchData();
-    } else {
-      notifyListeners();
     }
+    _isInitialized = true;
+    notifyListeners();
   }
 
   Future<void> saveSettings(String url, String apiKey, String spreadsheetUrl) async {
@@ -66,7 +70,10 @@ class FinanceProvider with ChangeNotifier {
     // Also persist settings to the Excel sheet
     if (_webAppUrl.isNotEmpty) {
       _sheetsApi.saveSetting('spreadsheetUrl', spreadsheetUrl);
-      _sheetsApi.saveSetting('geminiApiKeySet', apiKey.isNotEmpty ? 'true' : 'false');
+      // Store actual geminiApiKey in sheet for auto-load on fresh install
+      if (apiKey.isNotEmpty) {
+        _sheetsApi.saveSetting('geminiApiKey', apiKey);
+      }
       await fetchData();
     }
   }
