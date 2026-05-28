@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../providers/finance_provider.dart';
 import '../models/transaction.dart';
+import '../services/offline_ocr_service.dart';
 import '../theme/app_theme.dart';
 
 class _DraftTransaction {
@@ -60,7 +61,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     super.dispose();
   }
 
-  Future<void> _scanReceipt(ImageSource source) async {
+  Future<void> _scanReceipt(ImageSource source, bool isOffline) async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: source);
 
@@ -74,7 +75,13 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
         final provider = Provider.of<FinanceProvider>(context, listen: false);
         final availableSubCats = provider.getAvailableSubCategories();
 
-        final data = await provider.ocrService.extractReceiptInfo(_receiptImage!, availableSubCats);
+        Map<String, dynamic> data;
+        if (isOffline) {
+          final offlineOcr = OfflineOcrService();
+          data = await offlineOcr.extractReceiptInfoOffline(_receiptImage!);
+        } else {
+          data = await provider.ocrService.extractReceiptInfo(_receiptImage!, availableSubCats);
+        }
 
         setState(() {
           if (data['date'] != null) {
@@ -119,6 +126,67 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
         });
       }
     }
+  }
+
+  void _showOcrModeSelector(ImageSource source) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark 
+          ? AppTheme.darkCard 
+          : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Pilih Mode Scan', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 16),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFB86EF5).withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFFB86EF5)),
+                ),
+                title: const Text('Scan Cerdas (Gemini AI)', style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('Butuh internet. Otomatis pisahkan nama barang, harga & kategori.', style: TextStyle(fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _scanReceipt(source, false);
+                },
+              ),
+              const Divider(),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryGreen.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.flash_on_rounded, color: AppTheme.primaryGreen),
+                ),
+                title: const Text('Scan Cepat (Offline)', style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('Tanpa internet & tanpa limit. Hanya membaca teks mentah.', style: TextStyle(fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _scanReceipt(source, true);
+                },
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _saveTransactions() async {
@@ -277,7 +345,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                               child: ElevatedButton.icon(
                                 icon: const Icon(Icons.camera_alt_rounded, size: 18),
                                 label: const Text('Scan Kamera'),
-                                onPressed: () => _scanReceipt(ImageSource.camera),
+                                onPressed: () => _showOcrModeSelector(ImageSource.camera),
                                 style: ElevatedButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(vertical: 14),
                                 ),
@@ -288,7 +356,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                               child: OutlinedButton.icon(
                                 icon: const Icon(Icons.photo_library_rounded, size: 18),
                                 label: const Text('Galeri'),
-                                onPressed: () => _scanReceipt(ImageSource.gallery),
+                                onPressed: () => _showOcrModeSelector(ImageSource.gallery),
                                 style: OutlinedButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(vertical: 14),
                                 ),
