@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/finance_provider.dart';
-import '../services/spreadsheet_reader_service.dart';
 import '../theme/app_theme.dart';
 import 'dashboard_screen.dart';
 
@@ -13,69 +12,48 @@ class FirstSetupScreen extends StatefulWidget {
 }
 
 class _FirstSetupScreenState extends State<FirstSetupScreen> {
-  final _urlController = TextEditingController();
-  bool _isLoading = false;
-  String _statusMessage = '';
-  String _errorMessage = '';
+  final _scriptUrlController = TextEditingController();
+  final _spreadsheetUrlController = TextEditingController();
+  final _geminiKeyController = TextEditingController();
+  bool _isSaving = false;
+  bool _obscureKey = true;
 
   @override
   void dispose() {
-    _urlController.dispose();
+    _scriptUrlController.dispose();
+    _spreadsheetUrlController.dispose();
+    _geminiKeyController.dispose();
     super.dispose();
   }
 
-  Future<void> _connect() async {
-    final url = _urlController.text.trim();
-    if (url.isEmpty) {
-      setState(() => _errorMessage = 'Masukkan URL Spreadsheet terlebih dahulu.');
+  Future<void> _save() async {
+    final scriptUrl = _scriptUrlController.text.trim();
+    if (scriptUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppTheme.danger,
+          content: Text('Apps Script URL wajib diisi!',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        ),
+      );
       return;
     }
 
-    final sheetId = SpreadsheetReaderService.extractSheetId(url);
-    if (sheetId == null) {
-      setState(() => _errorMessage = 'URL tidak valid. Contoh: https://docs.google.com/spreadsheets/d/...');
-      return;
-    }
+    setState(() => _isSaving = true);
 
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-      _statusMessage = 'Membaca pengaturan dari spreadsheet...';
-    });
+    final provider = Provider.of<FinanceProvider>(context, listen: false);
+    await provider.saveSettings(
+      scriptUrl,
+      _geminiKeyController.text.trim(),
+      _spreadsheetUrlController.text.trim(),
+    );
 
-    try {
-      final reader = SpreadsheetReaderService();
-      final settings = await reader.readSettings(url);
+    setState(() => _isSaving = false);
 
-      setState(() => _statusMessage = 'Pengaturan ditemukan. Menyambungkan...');
-
-      final webAppUrl = settings['webAppUrl'] ?? '';
-      final geminiApiKey = settings['geminiApiKey'] ?? '';
-
-      if (webAppUrl.isEmpty) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage =
-              'Kolom "webAppUrl" belum ada di sheet Settings.\n\n'
-              'Pastikan Anda sudah menjalankan fungsi setupSheets() di Apps Script dan men-Deploy ulang.';
-        });
-        return;
-      }
-
-      final provider = Provider.of<FinanceProvider>(context, listen: false);
-      await provider.saveSettings(webAppUrl, geminiApiKey, url);
-
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const DashboardScreen()),
-        );
-      }
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
-        _statusMessage = '';
-      });
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const DashboardScreen()),
+      );
     }
   }
 
@@ -92,7 +70,7 @@ class _FirstSetupScreenState extends State<FirstSetupScreen> {
             children: [
               const SizedBox(height: 32),
 
-              // Logo / header
+              // Header
               Container(
                 width: 72, height: 72,
                 decoration: BoxDecoration(
@@ -113,121 +91,108 @@ class _FirstSetupScreenState extends State<FirstSetupScreen> {
               ),
 
               const SizedBox(height: 24),
-
               const Text(
-                'Selamat Datang!',
+                'Pengaturan Awal',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -0.5),
               ),
               const SizedBox(height: 8),
               Text(
-                'Hubungkan ke Google Spreadsheet Anda untuk mulai memantau keuangan.',
+                'Isi data berikut untuk mulai menggunakan aplikasi.',
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 15, height: 1.5,
                   color: isDark ? const Color(0xFF8899BB) : Colors.grey.shade600,
-                  height: 1.5,
                 ),
               ),
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 36),
 
-              // Step indicator
-              _stepCard(
-                number: '1',
-                title: 'Buka Google Spreadsheet Anda',
-                subtitle: 'Klik ikon bagikan (Share) → pilih "Anyone with link" → Copy link',
-                icon: Icons.table_chart_rounded,
-                color: const Color(0xFF34A853),
+              // Apps Script URL
+              _fieldCard(
+                isDark: isDark,
+                icon: Icons.code_rounded,
+                iconColor: const Color(0xFF5B8DEF),
+                title: 'Google Apps Script URL',
+                subtitle: 'Deploy skrip sebagai Web App (Anyone) dan tempel URL-nya.',
+                child: TextField(
+                  controller: _scriptUrlController,
+                  decoration: const InputDecoration(
+                    hintText: 'https://script.google.com/macros/s/.../exec',
+                    hintStyle: TextStyle(fontSize: 12),
+                  ),
+                  maxLines: null,
+                  style: const TextStyle(fontSize: 13),
+                ),
               ),
-              const SizedBox(height: 12),
-              _stepCard(
-                number: '2',
-                title: 'Tempel URL di bawah ini',
-                subtitle: 'App akan otomatis membaca Apps Script URL & Gemini Key dari sheet Settings',
-                icon: Icons.link_rounded,
-                color: AppTheme.primaryGreen,
+
+              const SizedBox(height: 16),
+
+              // Spreadsheet URL
+              _fieldCard(
+                isDark: isDark,
+                icon: Icons.table_chart_rounded,
+                iconColor: const Color(0xFF34A853),
+                title: 'URL Google Spreadsheet',
+                subtitle: 'Link spreadsheet agar bisa dibuka langsung dari aplikasi.',
+                child: TextField(
+                  controller: _spreadsheetUrlController,
+                  decoration: const InputDecoration(
+                    hintText: 'https://docs.google.com/spreadsheets/d/...',
+                    hintStyle: TextStyle(fontSize: 12),
+                  ),
+                  maxLines: null,
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Gemini API Key
+              _fieldCard(
+                isDark: isDark,
+                icon: Icons.auto_awesome_rounded,
+                iconColor: const Color(0xFFB86EF5),
+                title: 'Gemini API Key',
+                subtitle: 'Dapatkan API Key gratis dari Google AI Studio untuk fitur scan nota.',
+                child: TextField(
+                  controller: _geminiKeyController,
+                  obscureText: _obscureKey,
+                  decoration: InputDecoration(
+                    hintText: 'AIzaSy...',
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureKey ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                        size: 20,
+                      ),
+                      onPressed: () => setState(() => _obscureKey = !_obscureKey),
+                    ),
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                ),
               ),
 
               const SizedBox(height: 32),
 
-              // URL input
-              TextField(
-                controller: _urlController,
-                decoration: InputDecoration(
-                  labelText: 'URL Google Spreadsheet',
-                  hintText: 'https://docs.google.com/spreadsheets/d/...',
-                  hintStyle: const TextStyle(fontSize: 12),
-                  prefixIcon: const Icon(Icons.table_chart_rounded, color: Color(0xFF34A853)),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                  errorText: _errorMessage.isNotEmpty ? null : null,
-                ),
-                maxLines: null,
-                style: const TextStyle(fontSize: 13),
-              ),
-
-              if (_errorMessage.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.danger.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.danger.withOpacity(0.4)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.error_outline_rounded, color: AppTheme.danger, size: 18),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          _errorMessage,
-                          style: const TextStyle(color: AppTheme.danger, fontSize: 12, height: 1.5),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              if (_isLoading && _statusMessage.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryGreen.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const SizedBox(
-                        width: 16, height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryGreen),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(_statusMessage, style: const TextStyle(color: AppTheme.primaryGreen, fontSize: 13, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 24),
-
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _connect,
+                  onPressed: _isSaving ? null : _save,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 18),
                   ),
-                  child: _isLoading
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Sambungkan & Mulai', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text(
+                          'Simpan & Mulai',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                        ),
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-              // Info box
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
@@ -242,7 +207,7 @@ class _FirstSetupScreenState extends State<FirstSetupScreen> {
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Apps Script URL & Gemini API Key akan otomatis terbaca dari kolom "webAppUrl" & "geminiApiKey" di sheet Settings.\n\nPastikan spreadsheet sudah di-share sebagai "Anyone with link can view".',
+                        'Semua pengaturan bisa diubah kapan saja melalui menu Pengaturan di halaman utama.',
                         style: TextStyle(color: Color(0xFF5B8DEF), fontSize: 12, height: 1.5),
                       ),
                     ),
@@ -256,40 +221,52 @@ class _FirstSetupScreenState extends State<FirstSetupScreen> {
     );
   }
 
-  Widget _stepCard({
-    required String number,
+  Widget _fieldCard({
+    required bool isDark,
+    required IconData icon,
+    required Color iconColor,
     required String title,
     required String subtitle,
-    required IconData icon,
-    required Color color,
+    required Widget child,
   }) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.2)),
+        color: isDark ? AppTheme.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? AppTheme.darkCardBorder : Colors.grey.shade200,
+        ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 32, height: 32,
-            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
-            child: Center(
-              child: Text(number, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
-            ),
+          Row(
+            children: [
+              Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                  color: iconColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                    Text(subtitle,
+                        style: const TextStyle(color: Color(0xFF8899BB), fontSize: 11)),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: color)),
-                const SizedBox(height: 2),
-                Text(subtitle, style: TextStyle(fontSize: 11, color: color.withOpacity(0.7), height: 1.4)),
-              ],
-            ),
-          ),
+          const SizedBox(height: 14),
+          child,
         ],
       ),
     );
